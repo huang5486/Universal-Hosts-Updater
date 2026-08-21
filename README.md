@@ -44,12 +44,15 @@
    - 运行结束后自动关闭窗口
 ## 命令行用法
 ```powershell
-node universal_hosts_updater.js              # 立即更新一次 hosts
-node universal_hosts_updater.js --dry-run    # 演练模式，只显示不写入
-node universal_hosts_updater.js --watch      # 后台守护模式
-node universal_hosts_updater.js --install    # 创建开机自启动任务
-node universal_hosts_updater.js --uninstall  # 删除开机自启动任务
-node universal_hosts_updater.js --help       # 显示帮助
+node universal_hosts_updater.js                           # 立即更新一次 hosts
+node universal_hosts_updater.js --dry-run                 # 演练模式，只显示不写入
+node universal_hosts_updater.js --watch                   # 后台守护模式
+node universal_hosts_updater.js --install                 # 创建开机自启动任务
+node universal_hosts_updater.js --uninstall               # 删除开机自启动任务 
+node universal_hosts_updater.js --category base           # 仅加速开发平台
+node universal_hosts_updater.js --category base,gaming    # 加速多个分类
+node universal_hosts_updater.js --services github,gitlab  # 仅加速指定服务
+node universal_hosts_updater.js --help                    # 显示帮助
 ```
 ## 文件说明
 | 文件 | 说明 |
