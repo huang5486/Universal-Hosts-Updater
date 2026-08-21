@@ -74,3 +74,8 @@ node universal_hosts_updater.js --help       # 显示帮助
 ---
 
 > 本次代码纯 Vibe Coding 项目，主要代码由 Trae AI 辅助生成，人工审查后上线
+
+> 1.1.0 更新内容：
+> ---
+> - 更改了版本号为 1.1.0
+> - 新增了交互式服务平台选择菜单

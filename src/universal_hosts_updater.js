@@ -15,12 +15,15 @@
  * =============================================================================
  *
  * 用法示例:
- *   node universal_hosts_updater.js              # 立即更新一次 hosts
- *   node universal_hosts_updater.js --dry-run    # 演练模式，只显示不写入
- *   node universal_hosts_updater.js --watch      # 后台守护模式
- *   node universal_hosts_updater.js --install    # 创建开机自启动任务
- *   node universal_hosts_updater.js --uninstall  # 删除开机自启动任务
- *   node universal_hosts_updater.js --help       # 显示帮助
+ *   node universal_hosts_updater.js                   # 立即更新一次 hosts
+ *   node universal_hosts_updater.js --dry-run         # 演练模式，只显示不写入
+ *   node universal_hosts_updater.js --watch           # 后台守护模式
+ *   node universal_hosts_updater.js --install         # 创建开机自启动任务
+ *   node universal_hosts_updater.js --uninstall       # 删除开机自启动任务
+ *   node universal_hosts_updater.js --category base         # 仅加速开发平台
+ *   node universal_hosts_updater.js --category base,gaming  # 加速多个分类
+ *   node universal_hosts_updater.js --services github,gitlab  # 仅加速指定服务
+ *   node universal_hosts_updater.js --help                  # 显示帮助
  */
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -38,6 +41,7 @@ const { TARGET_DOMAINS_BASE } = require("./target-domains-base.js");
 const { TARGET_DOMAINS_GAMING } = require("./target-domains-gaming.js");
 const { TARGET_DOMAINS_MEDIA } = require("./target-domains-media.js");
 const { TARGET_DOMAINS_NETWORK } = require("./target-domains-network.js");
+const { getServiceDomains } = require("./services.js");
 
 const VERSION = "4.0.0";
 
@@ -107,15 +111,32 @@ const TASK_NAME = "UniversalHostsUpdater";
 const MARKER_START = "# === UniversalHostsUpdater Start ===";
 const MARKER_END = "# === UniversalHostsUpdater End ===";
 
-// 合并所有分类目标域名，并自动去重
-const TARGET_DOMAINS = Array.from(
-  new Set([
-    ...TARGET_DOMAINS_BASE,
-    ...TARGET_DOMAINS_GAMING,
-    ...TARGET_DOMAINS_MEDIA,
-    ...TARGET_DOMAINS_NETWORK,
-  ])
-);
+// 分类域名映射，供命令行选择使用
+const TARGET_DOMAINS_BY_CATEGORY = {
+  base: TARGET_DOMAINS_BASE,
+  gaming: TARGET_DOMAINS_GAMING,
+  media: TARGET_DOMAINS_MEDIA,
+  network: TARGET_DOMAINS_NETWORK,
+};
+
+const DEFAULT_CATEGORIES = Object.keys(TARGET_DOMAINS_BY_CATEGORY);
+
+function buildTargetDomains(options) {
+  if (options.services && options.services.length > 0) {
+    return getServiceDomains(options.services);
+  }
+  const categories = options.categories && options.categories.length > 0 ? options.categories : DEFAULT_CATEGORIES;
+  const domains = [];
+  for (const category of categories) {
+    const list = TARGET_DOMAINS_BY_CATEGORY[category];
+    if (list) {
+      domains.push(...list);
+    } else {
+      logger.warning(`未知分类: ${category}`);
+    }
+  }
+  return Array.from(new Set(domains));
+}
 
 const ONLINE_SOURCES = [
   "https://cdn.jsdelivr.net/gh/521xueweihan/GitHub520@main/hosts",
@@ -351,23 +372,26 @@ function normalizeDomain(domain) {
   return domain.toLowerCase().trim().replace(/^\*\./, "");
 }
 
-const TARGET_DOMAIN_SET = new Set();
-const TARGET_DOMAIN_SUFFIXES = [];
+const targetDomainSet = new Set();
+const targetDomainSuffixes = [];
 
-(function initTargetDomains() {
-  for (const pattern of TARGET_DOMAINS) {
+function initTargetDomains(options) {
+  targetDomainSet.clear();
+  targetDomainSuffixes.length = 0;
+  const targetDomains = buildTargetDomains(options);
+  for (const pattern of targetDomains) {
     if (pattern.startsWith("*.")) {
-      TARGET_DOMAIN_SUFFIXES.push(pattern.slice(WILDCARD_PREFIX_LENGTH));
+      targetDomainSuffixes.push(pattern.slice(WILDCARD_PREFIX_LENGTH));
     } else {
-      TARGET_DOMAIN_SET.add(pattern);
+      targetDomainSet.add(pattern);
     }
   }
-})();
+}
 
 function domainMatchesTarget(domain) {
   const d = normalizeDomain(domain);
-  if (TARGET_DOMAIN_SET.has(d)) return true;
-  for (const suffix of TARGET_DOMAIN_SUFFIXES) {
+  if (targetDomainSet.has(d)) return true;
+  for (const suffix of targetDomainSuffixes) {
     if (d === suffix || d.endsWith("." + suffix)) return true;
   }
   return false;
@@ -596,10 +620,11 @@ async function dnsStrategy() {
   logger.info("策略 P2：尝试 DNS 备用解析...");
   const map = {};
   const resolver = new dns.Resolver();
-  const progress = new ProgressBar(CORE_DNS_DOMAINS.length, "DNS 备用解析");
+  const dnsDomains = CORE_DNS_DOMAINS.filter(domainMatchesTarget);
+  const progress = new ProgressBar(dnsDomains.length, "DNS 备用解析");
   // 使用系统默认 DNS
-  for (let i = 0; i < CORE_DNS_DOMAINS.length; i++) {
-    const domain = CORE_DNS_DOMAINS[i];
+  for (let i = 0; i < dnsDomains.length; i++) {
+    const domain = dnsDomains[i];
     try {
       const addresses = await withTimeout(
         new Promise((resolve, reject) => {
@@ -662,18 +687,29 @@ function selectBestIps(results) {
   return map;
 }
 
+function filterFallbackPoolByCategory(fallbackPool) {
+  const filtered = {};
+  for (const domain of Object.keys(fallbackPool)) {
+    if (domainMatchesTarget(domain)) {
+      filtered[domain] = fallbackPool[domain];
+    }
+  }
+  return filtered;
+}
+
 async function staticFallbackStrategy(fallbackPool, options = {}) {
   logger.info("策略 P3：尝试静态后备池...");
   const port = options.probePort ?? DEFAULT_PROBE_PORT;
   const timeoutMs = options.probeTimeout ?? DEFAULT_PROBE_TIMEOUT_MS;
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY;
 
-  const domains = Object.keys(fallbackPool);
+  const filteredPool = filterFallbackPoolByCategory(fallbackPool);
+  const domains = Object.keys(filteredPool);
   if (domains.length === 0) {
     return { success: false, source: "fallback", error: "静态后备池为空" };
   }
 
-  const tasks = buildProbeTasks(fallbackPool, port, timeoutMs);
+  const tasks = buildProbeTasks(filteredPool, port, timeoutMs);
   if (tasks.length === 0) {
     return { success: false, source: "fallback", error: "静态后备池为空" };
   }
@@ -1109,7 +1145,8 @@ function validateIpMap(ipMap, skipValidation) {
     logger.info("已跳过写入校验");
     return true;
   }
-  for (const domain of CORE_VALIDATION_DOMAINS) {
+  const validationDomains = CORE_VALIDATION_DOMAINS.filter(domainMatchesTarget);
+  for (const domain of validationDomains) {
     if (!(domain in ipMap)) {
       const fallbackIp = DEFAULT_FALLBACK_IPS[domain]?.find(
         (ip) => isValidIPv4(ip) && !isPrivateOrLoopbackIP(ip)
@@ -1344,6 +1381,22 @@ function parseBooleanOption(arg) {
   return BOOLEAN_OPTION_KEY_MAP[arg];
 }
 
+function parseCategoryList(value) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((c) => c.trim().toLowerCase())
+    .filter((c) => c.length > 0);
+}
+
+function parseServicesList(value) {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((c) => c.trim().toLowerCase())
+    .filter((c) => c.length > 0);
+}
+
 function parseValueOption(arg, value) {
   switch (arg) {
     case "--check-interval":
@@ -1354,6 +1407,10 @@ function parseValueOption(arg, value) {
       return { key: "probePort", value: parsePositiveInt(value, DEFAULT_PROBE_PORT) };
     case "--concurrency":
       return { key: "concurrency", value: parsePositiveInt(value, DEFAULT_CONCURRENCY) };
+    case "--category":
+      return { key: "categories", value: parseCategoryList(value) };
+    case "--services":
+      return { key: "services", value: parseServicesList(value) };
     default:
       return null;
   }
@@ -1375,6 +1432,8 @@ function parseArguments() {
     probeTimeout: DEFAULT_PROBE_TIMEOUT_MS,
     probePort: DEFAULT_PROBE_PORT,
     concurrency: DEFAULT_CONCURRENCY,
+    categories: [],
+    services: [],
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -1411,6 +1470,10 @@ Universal Hosts Updater v${VERSION}
   --no-uac               跳过自动 UAC 提权
   --no-validation        跳过写入校验
   --no-fallback-refresh  启动时不刷新静态后备候选池
+  --category <分类>      指定加速分类，多个用逗号分隔
+                         可选：base, gaming, media, network（默认全部）
+  --services <服务>      指定具体服务平台，多个用逗号分隔
+                         例如：github,gitlab,steam,twitch（覆盖 --category）
   --check-interval <秒>  守护模式检测间隔（默认 300 秒）
   --probe-timeout <毫秒> TCP 探测超时（默认 5000）
   --probe-port <端口>    TCP 探测端口（默认 443）
@@ -1484,6 +1547,8 @@ async function main() {
 
   const handled = await handleStartupOptions(options);
   if (handled) return;
+
+  initTargetDomains(options);
 
   printStartupInfo();
 
