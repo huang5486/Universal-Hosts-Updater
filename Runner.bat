@@ -86,4 +86,8 @@ if /i "%MINIMIZE_CHOICE%"=="Y" (
 ) else (
     node "universal_hosts_updater.js" %NODE_ARGS%
 )
+
+:: 刷新 DNS 缓存
+ipconfig /flushdns
+
 exit /b 0

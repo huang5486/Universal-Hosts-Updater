@@ -1,5 +1,12 @@
 # Universal Hosts Updater
 一键更新 Windows 系统 hosts 文件，解决中国大陆访问 GitHub、GitLab 及其关联生态缓慢或无法访问的问题。
+
+---
+
+**📮📮📮 非常抱歉，由于个人原因，本项目暂时停更。**
+
+---
+
 ## 主要功能
 本工具通过更新系统 hosts 文件，加速以下平台和生态在中国大陆地区的访问：
 - **代码托管与开发平台**
@@ -35,6 +42,10 @@
 ## 运行环境
 - Windows 10 / 11
 - Node.js >= 14
+- 确保关闭VPN、代理
+- 确保关闭浏览器的安全hosts
+  - Chrome：Chrome 设置 → 隐私和安全 → 安全 → 关闭"使用安全 DNS"
+  - Edge：Edge 设置 → 隐私、搜索和服务 → 安全性 → 关闭"使用安全的 DNS"
 ## 快速开始
 1. 确保已安装 [Node.js](https://nodejs.org/zh-cn/download)。 并添加到环境变量。
 2. 双击 [Runner.bat](Runner.bat)：
@@ -42,6 +53,15 @@
    - 请求管理员权限
    - 最小化到后台运行
    - 运行结束后自动关闭窗口
+3. ~~运行结束后在终端输入 `ipconfig /flushdns`~~  
+   **在1.2.0版本中刷新DNS缓存已写入Runner.bat**
+4. 在Cmd/Powershell写入
+   ```powershell
+   ping github.com # 测试加速网站是否正常访问
+   ```
+   如果显示`0% 丢失`，则加速成功(如图)
+   ![Snipaste 2026 08 21 11 58 42](https://imgur.la/images/2026/08/21/Snipaste_2026-08-21_11-58-42.jpg)
+5. 重启浏览器
 ## 命令行用法
 ```powershell
 node universal_hosts_updater.js                           # 立即更新一次 hosts
@@ -76,7 +96,6 @@ node universal_hosts_updater.js --help                    # 显示帮助
 
 > 本次代码纯 Vibe Coding 项目，主要代码由 Trae AI 辅助生成，人工审查后上线
 
-> 1.1.0 更新内容：
+> 1.2.0 更新内容
 > ---
-> - 更改了版本号为 1.1.0
-> - 新增了交互式服务平台选择菜单
+> - 刷新DNS缓存功能已写入Runner.bat
