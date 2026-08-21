@@ -49,8 +49,6 @@ node universal_hosts_updater.js --dry-run                 # 演练模式，只�
 node universal_hosts_updater.js --watch                   # 后台守护模式
 node universal_hosts_updater.js --install                 # 创建开机自启动任务
 node universal_hosts_updater.js --uninstall               # 删除开机自启动任务 
-node universal_hosts_updater.js --category base           # 仅加速开发平台
-node universal_hosts_updater.js --category base,gaming    # 加速多个分类
 node universal_hosts_updater.js --services github,gitlab  # 仅加速指定服务
 node universal_hosts_updater.js --help                    # 显示帮助
 ```
