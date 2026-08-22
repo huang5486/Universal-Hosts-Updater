@@ -9,7 +9,7 @@
  * 作者: AI Assistant
  * 用途: 解决中国大陆访问 GitHub、GitLab 及其关联生态缓慢/无法访问的问题
  * 功能: 在线 hosts 源获取、DNS 备用解析、静态后备池探测、系统 hosts 原子写入、
- *       UAC 自动提权、任务计划程序自启动、守护模式定时检测
+ *       DNS 缓存刷新、UAC 自动提权、任务计划程序自启动、守护模式定时检测
  * 运行环境: Windows 10/11, Node.js >= 14
  * 依赖: 零外部 npm 依赖，仅使用 Node.js 内置模块
  * =============================================================================
@@ -1208,6 +1208,20 @@ async function writeHosts(ipMap, options = {}) {
   }
 }
 
+/**
+ * 刷新系统 DNS 缓存，使新的 hosts 条目立即生效
+ */
+function flushDnsCache() {
+  try {
+    childProcess.execSync("ipconfig /flushdns", { stdio: "ignore" });
+    logger.info("已刷新系统 DNS 缓存，新 hosts 条目立即生效");
+    return true;
+  } catch (err) {
+    logger.warning(`刷新 DNS 缓存失败: ${err.message}`);
+    return false;
+  }
+}
+
 function ipMapChanged(oldMap, newMap) {
   const oldKeys = Object.keys(oldMap || {});
   const newKeys = Object.keys(newMap || {});
@@ -1315,6 +1329,7 @@ async function runMonitorMode(options) {
       const result = await resolveIpMap(options);
       if (result.success && ipMapChanged(lastIpMap, result.data)) {
         await writeHosts(result.data, options);
+        flushDnsCache();
         lastIpMap = { ...result.data };
         logger.info("IP 映射发生变化，已更新 hosts 文件");
       } else {
@@ -1534,9 +1549,7 @@ async function handleSingleUpdate(options) {
   logger.info(`成功获取 ${Object.keys(result.data).length} 条域名映射，来源: ${result.source}`);
   const written = await writeHosts(result.data, options);
   if (written) {
-    // 删除冗余的 console.log，成功信息已由 logger.info 记录
-  } else if (options.dryRun) {
-    // 删除冗余的 console.log，演练模式输出已在 writeHosts 中处理
+    flushDnsCache();
   }
 }
 

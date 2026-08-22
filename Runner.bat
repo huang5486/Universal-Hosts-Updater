@@ -87,7 +87,6 @@ if /i "%MINIMIZE_CHOICE%"=="Y" (
     node "universal_hosts_updater.js" %NODE_ARGS%
 )
 
-:: 刷新 DNS 缓存
-ipconfig /flushdns
+:: DNS 缓存刷新已由 universal_hosts_updater.js 在 hosts 写入成功后自动执行
 
 exit /b 0
